@@ -1,0 +1,381 @@
+** defining new functions
+#+begin_src lisp
+  (defun name (parameter*)
+    "Optional docstring."
+    body-form*)
+  
+  (defun verbose-sum (x y)
+    "Sum any two numbers after printing a message."
+    (format t "Summing ~d and ~d.~%" x y)
+    (+ x y))
+#+end_src
+
+** optional parameters
+#+begin_src lisp
+  (defun make-rectangle (width &optional (heigth width))
+    ...)
+  
+  (defun foo (a b &optional (c 3 c-supplied-p))
+    (list a b c c-supplied-p))
+#+end_src
+
+** rest parameters
+#+begin_src lisp
+  (defun format (stream string &rest values)
+    ...)
+  
+  (defun + (&rest numbers)
+    (loop for i in numbers summing i))
+#+end_src
+
+** keyword parameters
+#+begin_src lisp
+  (defun foo (&key a b c) (list a b c))
+  
+  (foo)                               ;; => (NIL NIL NIL)
+  (foo :a 1)                          ;; => (1 NIL NIL)
+  (foo :a 2 :c 10)                    ;; => (2 NIL 10)
+  (foo :c :potato :b :carrot :a :yam) ;; => (:YAM :CARROT :POTATO)
+#+end_src
+
+#+begin_src lisp
+  (defun foo (&key (a 0) (b 0 b-supplied-p) (c (+ a b)))
+    (list a b c b-supplied-p))
+#+end_src
+
+Now for some extra funky stuff, there is a different way to do it to
+have different key names on the inside and on the outside. See:
+
+#+begin_src lisp
+  (defun foo (&key ((:apple a)) ((:box b) 0)
+		   ((:charlie c) 0 c-supplied-p))
+    (list a b c c-supplied-p))
+  
+  (foo :apple 10 :charlie "potato" :box :banana) ;; => (10 :BANANA "potato")
+#+end_src
+
+** mixing parameters
+
+Usually we combine either required parameters with some other type, or
+sometimes we may combine &optional and &rest parameters. Combining
+either of those types with &key parameters can create confusing
+results. For instance:
+
+#+begin_src lisp
+  (defun foo (x &optional y &key z) (list x y z))
+  
+  (foo)        ;; => (NIL NIL NIL)
+  (foo 1)      ;; => (1 NIL NIL)
+  (foo 1 :z 3) ;; => ERROR since y -> :z and then there's a
+	       ;; loose 3 argument with no key
+#+end_src
+
+Most times you'll be better off by only using key parameters instead.
+
+We can safely combine &rest and &key, but the behavior may be weird at
+first. Let's see:
+
+#+begin_src lisp
+  (defun foo (&rest rest &key a b c)
+    (list rest a b c))
+  
+  (foo :a 1 :b 2 :c 3) ;; => ((:A 1 :B 2 :C 3) 1 2 3)
+#+end_src
+
+** function return values
+
+*return-from* is common to blocks, not only functions.  Otherwise, the
+last expression's return value is returned by the function, normally.
+
+#+begin_src lisp
+  (defun foo (n)
+    (dotimes (i 10)
+      (dotimes (j 10)
+	(when (> (* i j) n)
+	  (return-from foo (list i j))))))
+#+end_src
+
+** higher-order functions
+
+#+begin_src lisp
+  (defun foo (x) (* 2 x))
+  (function foo) ;; => #<Interpreted Function FOO>
+  #'foo          ;; => #<Interpreted Function FOO>
+#+end_src
+
+FUNCALL is to be used when the number of arguments is known at time of
+writing. Hence:
+
+#+begin_src lisp
+  (foo 1 2 3) ;; is equivalent to
+  (funcall #'foo 1 2 3)
+#+end_src
+
+However, take notice:
+
+#+begin_src lisp
+  (defun plot (fn min max step)
+    (loop for i from min to max by step do
+      (loop repeat (funcall fn i) do (format t "*"))
+      (format t "~%")))
+  
+  (plot #'exp 0 4 1/2)
+#+end_src
+
+Now let's suppose the arguments for PLOT came as a list, in a variable
+called PLOT-DATA.
+
+#+begin_src lisp
+  (plot (car plot-data) (cadr plot-data) (caddr plot-data) (cadddr plot-data))
+  (plot (first plot-data) (second plot-data) (third plot-data) (fourth plot-data))
+#+end_src
+
+This is clearly disgusting.
+
+#+begin_src lisp
+  (apply #'plot plot-data)
+  (apply #'plot #'exp plot-data) ;; mu'isu'a the function isn't inside the list 
+#+end_src
+
+** anonymous functions
+
+#+begin_src lisp
+  (lambda (params) body)
+  
+  (funcall #'(lambda (x y) (+ x y)) 2 3)
+  ((lambda (x y) (+ x y)) 2 3)
+#+end_src
+
+* variables                                                            :ch06:
+
+** basics
+
+#+begin_src lisp
+  (defun foo (x y z) (+ x y z))
+  
+  (let (variable*)
+    body-form*)
+  
+  (let ((x 10) (y 20) z)
+    ...)
+  
+  (dotimes (x 10) (format t "~d " x))
+  
+  (let* ((x 10)
+	 (y (+ x 20)))
+    (list x y))
+  ;; is equivalent to
+  (let ((x 10))
+    (let ((y (+ x 20)))
+      (list x y)))
+#+end_src
+
+** lexical variables and closures
+
+#+begin_src lisp
+  (let ((count 0))
+    #'(lambda () (setf count (1+ count))))
+  
+  (defparameter *fn* (let ((count 0)) #'(lambda () (setf count (1+ count)))))
+  
+  (funcall *fn*) ;; => 1
+  (funcall *fn*) ;; => 2
+  (funcall *fn*) ;; => 3
+  
+  (let ((count))
+    (list
+     #'(lambda () (incf count))
+     #'(lambda () (decf count))
+     #'(lambda () count)))
+#+end_src
+
+** dynamic variables
+
+#+begin_src lisp
+  (defvar *count* 0
+    "Count of widgets made so far.")
+  
+  (defparameter *gap-tolerance* 0.001
+    "Tolerance to be allowed in widget gaps.")
+#+end_src
+
+#+begin_src lisp
+  (defun increment-widget-count () (incf *count*))
+#+end_src
+
+LET can shadow global bindings.
+
+#+begin_src lisp
+  (let ((*standard-output* *some-other-stream*))
+    (stuff))
+#+end_src
+
+Once stuff returns and control leaves the LET, *standard-output* will
+go back to referring to its previous binding.
+
+#+begin_src lisp
+  (defvar *x* 10)
+  (defun foo () (format t "X: ~d~%" *x*))
+  
+  (foo) ;; => "X: 10\n" NIL
+  
+  (let ((*x* 20)) (foo)) ;; => "X: 20\n" NIL
+  
+  (foo) ;; => "X: 10\n" NIL
+  
+  (defun bar ()
+    (foo)
+    (let ((*x* 20)) (foo))
+    (foo))
+#+end_src
+
+** constants
+
+#+begin_src lisp
+  (defconstant +a-name+ initial-value-form "docstring")
+#+end_src
+
+** assignment
+
+#+begin_src lisp
+  (setf place value)
+  
+  (setf x 10)
+  
+  (defun foo (x) (setf x 10)) ;; has no effect on the outside of foo
+  
+  (let ((y 20))
+    (foo y)
+    (print y)) ;; prints 20
+  
+  (setf x 10 y 20) ;; does what you'd think
+  
+  (setf x (setf y (random 10))) ;; SETF returns the assigned value
+#+end_src
+
+** generalized assignment
+
+#+begin_src lisp
+  (setf x 10)
+  (setf (aref a 0) 10)
+  (setf (gethash 'key hash) 10)
+  (setf (field o) 10)
+#+end_src
+
+#+begin_src lisp
+  (incf x)
+  (decf x)
+  (incf x 10)
+  
+  (rotatef a b) ;; equivalent to
+  (let ((tmp a)) (setf a b b tmp) nil)
+  
+  (shiftf a b 10) ;; equivalent to
+  (let ((tmp a)) (setf a b b 10) tmp)
+#+end_src
+
+* macros: standard control constructs
+
+** WHEN and UNLESS
+
+#+begin_src lisp
+  (if condition then-form &optional else)
+  
+  (when (spam-p current-message)
+    (file-in-spam-folder current-message)
+    (update-spam-database current-message))
+  
+  (defmacro when (condition &rest body)
+    `(if ,condition (progn ,@body)))
+  
+  (defmacro unless (condition &rest body)
+    `(if (not ,condition) (progn ,@body)))
+#+end_src
+
+** COND
+
+#+begin_src lisp
+  (cond (a (do-x))
+	(b (do-y))
+	(t (do-z)))
+#+end_src
+
+** AND and OR
+
+AND and OR are macros in order to be able to short-circuit.
+
+#+begin_src lisp
+  (not nil)
+  (not (= 1 1))
+  (and (= 1 2) (this-will-not-run))
+  (or (= 1 1) (neither-will-this))
+#+end_src
+
+** looping
+
+Default constructs: DO, DOTIMES, DOLIST and LOOP.
+Refer to the cookbook for more memes. Options of packages:
+- iterate
+- for
+- series
+- gtwiwtg
+
+MAP, MAPCAR and etc can also be used for related stuff.
+
+** DOTIMES and DOLIST
+
+#+begin_src lisp
+  (dolist (var list)
+    body-form*)
+  
+  (dolist (x '(1 2 3))
+    (print x)
+    (if (evenp x)
+	(return)))
+  
+  (dotimes (var count)
+    body-form*)
+  
+  (dotimes (x 20)
+    (dotimes (y 20)
+      (format t "~3d " (* (1+ x) (1+ y))))
+    (format t "~%"))
+#+end_src
+
+** DO
+
+#+begin_src lisp
+  (do (variable-definition*)
+      (end-test-form result-form*)
+   statement*)
+  
+  ;; a variable-definition looks like:
+  (var init-form step-form)
+  
+#+end_src
+
+At the beginning of each iteration, once the variables have all been
+given their new values, /end-test-form/ is evaluated. As long as it
+evaluates to NIL, the iteration proceeds, running the /statements/ in
+order.
+
+When /end-test-form/ evaluates to T, the /result-forms/ are evaluated,
+and the value of the last one is returned as the value of the DO expr.
+
+#+begin_src lisp
+  ;; fibonacci example
+  (do ((n 0 (1+ n))
+       (cur 0 next)
+       (next 1 (+ cur next)))
+      ((= 10 n) cur))
+  
+  ;; dotimes-like
+  (do ((i 0 (1+ i)))
+      ((>= i 4))
+    (print i))
+  
+  ;; idiomatic ofc would be
+  (dotimes (i 4) (print i))
+#+end_src
+
+* practical chapter                                                    :ch09:
